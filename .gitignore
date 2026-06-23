@@ -1,0 +1,59 @@
+# OS / editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments and local dependency installs
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Jupyter local state
+.ipynb_checkpoints/
+
+# Build / packaging artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Research workspace local data.
+# Keep directory placeholders, but do not commit downloaded/raw data by default.
+**/data/*
+!**/data/.gitkeep
+
+# Prior research raw assets can be large or copyrighted.
+# Keep metadata, notes, paper.md, and source.md under version control.
+**/prior_research/**/paper.pdf
+**/prior_research/**/source/
+
+# Reproducible intermediate work directories.
+# Final paper artifacts in results/ are intentionally not ignored.
+**/reproduction/work/
+
+# Local verification sample project.
+# This is useful for manual checks, but should not be committed as part of the MVP core.
+example_project/

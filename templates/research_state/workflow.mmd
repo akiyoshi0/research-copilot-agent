@@ -1,0 +1,42 @@
+flowchart TD
+    A[研究計画書を配置] --> B[prior_researchを配置または取得]
+    B --> C[prior-research-ingester]
+    C --> D[project-initializer]
+    D --> E[task-planner]
+
+    E --> F[review-gate: 方針確認]
+    F -->|PASS| G[research-executor]
+    F -->|REVISE| E
+    F -->|HUMAN| U[人間判断]
+    F -->|STOP| Z[停止]
+
+    U --> E
+
+    G --> H[experiment capsule作成]
+    H --> I[review-gate: 実験・結果・複雑化レビュー]
+
+    I -->|PASS| J[research_state更新]
+    I -->|REVISE| E
+    I -->|HUMAN| U
+    I -->|STOP| E
+
+    J --> K{src変更を採用する?}
+    K -->|Yes| L[review-gate: src変更採用判定]
+    K -->|No| N{論文化できる?}
+
+    L -->|PASS| M[src変更を採用]
+    L -->|REVISE| E
+    L -->|HUMAN| U
+    M --> N
+
+    N -->|No| E
+    N -->|Yes| O[manuscript-builder]
+
+    O --> P[review-gate: 論文レビュー]
+    P -->|PASS| Q[投稿準備]
+    P -->|REVISE: 原稿修正| O
+    P -->|REVISE: 追加実験| E
+    P -->|HUMAN| U
+    P -->|STOP| E
+
+    Q --> R[完了]

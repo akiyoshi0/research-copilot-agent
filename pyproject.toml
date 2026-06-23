@@ -1,0 +1,12 @@
+[project]
+name = "research-copilot-mvp"
+version = "0.1.0"
+description = "A minimal research co-pilot workspace for Codex."
+requires-python = ">=3.11"
+dependencies = [
+    "pymupdf4llm",
+    "gitingest",
+]
+
+[tool.uv]
+exclude-newer = "180 days"
