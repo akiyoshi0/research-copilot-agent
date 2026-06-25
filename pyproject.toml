@@ -2,7 +2,16 @@
 name = "research-copilot-mvp"
 version = "0.1.0"
 description = "A minimal research co-pilot workspace for Codex."
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
+keywords = [
+    "ai-for-science",
+    "codex",
+    "research",
+    "reproducibility",
+    "scientific-workflow",
+]
 dependencies = [
     "pymupdf4llm",
     "gitingest",

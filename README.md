@@ -1,52 +1,110 @@
-# Research Co-Pilot Workspace MVP
+# Research Co-Pilot Agent
 
-これは、研究者とCodexがMarkdownを共有記憶として使い、研究計画、先行研究整理、実装、実験、結果解釈、論文作成を進めるための最小構成です。
-目的は完全自動研究者を作ることではありません。
-研究者が主導し、Codexが横で整理と実行を支援します。
+Research Co-Pilot Agent は、研究者が主導し、Codex が横で研究を整理、実装、検証、論文化まで支援するためのローカル研究並走ワークスペースです。
+
+目的は「完全自動研究者」を作ることではありません。
+目的は、研究者の判断を中心に残したまま、先行研究整理、実験記録、再現性確認、論文作成の負担を下げることです。
+
+このリポジトリは、生命科学、バイオインフォマティクス、機械学習研究における「真の研究者並走型 AI for Science」を実現するための最小構成を提供します。
+
+```text
+Codex
++ Markdown
++ skills
++ review-gate
++ experiment capsules
++ reproducible results
++ manuscript workflow
+```
+
+## なぜ必要か
+
+研究で AI を使うときの問題は、単にコードを書けるかどうかではありません。
+実際の研究では、次のような地味で重要な作業が継続的に発生します。
+
+- 研究計画を崩さずにタスクへ分解する
+- 先行研究のPDFと公開コードを整理する
+- 実験条件、seed、環境、出力、失敗を記録する
+- 一時的な実験と採用済みコードを分ける
+- 結果の飛躍、データリーク、外部送信リスクを確認する
+- 論文本文と内部作業ログを混同しない
+- 論文で使う表や図を完全再生成できる状態にする
+
+Research Co-Pilot Agent は、これらを Codex と Markdown だけで扱えるようにします。
+複雑なWeb UI、DB、ベクトルDB、多数の自律エージェントは使いません。
+研究者が理解でき、監査でき、必要なところで止められることを優先します。
+
+## 設計思想
+
+### 人間主導
+
+研究方針、評価指標、主要主張、投稿準備、大規模実験、外部API送信は、Codexだけで勝手に進めません。
+重要な局面では `03-review-gate` によって止め、人間の判断を要求します。
+
+### ローカル優先
+
+研究状態はローカルのMarkdownファイルとして管理します。
+明示的に必要とされない限り、データベース、クラウド同期、独自Web UIは導入しません。
+
+### 再現性優先
+
+探索実験は `experiments/` に experiment capsule として残します。
+論文に使う本実験は `reproduction/` から `results/` を再生成できる形に整理します。
+原稿は `results/` の成果物を参照し、予備実験の生出力を直接参照しません。
+
+### 論文本文と内部管理の分離
+
+`research_state/`、review-gate、実行ログ、`scripts/` と `src/` の責務分離、`results/result_index.md` などは内部管理情報です。
+論文本文には、研究内容を理解するために必要なデータ、方法、結果、考察だけを書きます。
 
 ## 目指さないこと
 
+- 完全自動研究者
+- 自動投稿
 - 独自Web UI
 - データベース
 - ベクトルDB
 - 複雑なマルチエージェント基盤
-- 完全自動研究者
-- 自動投稿
+- 研究者の判断を置き換えること
+- 外部APIへローカルデータを無断送信すること
 
-## 本体リポジトリの構成
+## リポジトリ構成
 
 ```text
 research-copilot-mvp/
 ├── README.md
+├── LICENSE
+├── ROADMAP.md
 ├── AGENTS.md
 ├── tools/
 │   └── init_research_workspace.py
 ├── templates/
 ├── skills/
-└── example_project/
+└── .github/
+    └── ISSUE_TEMPLATE/
 ```
 
-`skills/` は、生成先プロジェクトの `.agents/skills/` にコピーする正本です。
-`templates/` は、生成先プロジェクトにコピーするMarkdown、Mermaid、設定ファイル、`.gitkeep` の正本です。
-`PROJECT_BRIEF.md` は本体設計書です。
-生成先研究プロジェクトにはコピーせず、研究者向けの説明は `README.md`、Codex向けの規則は `AGENTS.md` に置きます。
+`skills/` は、生成先研究プロジェクトの `.agents/skills/` にコピーされる正本です。
+`templates/` は、生成先研究プロジェクトにコピーされるMarkdown、Mermaid、設定ファイル、`.gitkeep` の正本です。
+`example_project/` はローカル検証用のサンプルであり、公開リポジトリの中核成果物としては扱いません。
 
-## 初期化方法
+## インストール
 
-依存ライブラリは `uv` で管理します。
-このプロジェクトでは `pip install` ではなく `uv sync` を使います。
+依存関係は `uv` で管理します。
 
 ```bash
 uv sync
 ```
 
-新しい研究プロジェクトを作る場合は次を実行します。
+このプロジェクトでは、通常のセットアップでは `pip install` ではなく `uv sync` を使います。
+
+## 新しい研究ワークスペースを作る
 
 ```bash
 python tools/init_research_workspace.py --project-name my_project
 ```
 
-## 生成される研究プロジェクト
+生成される研究ワークスペースは次の構成です。
 
 ```text
 my_project/
@@ -73,86 +131,80 @@ my_project/
     └── skills/
 ```
 
-`README.md` は、生成先研究プロジェクトで研究者がどう作業するかを説明する利用ガイドです。
-`AGENTS.md` は、Codexが守る作業規則、review-gate、experiment capsule、`src/` 変更ルール、MarkdownとPythonの書き方をまとめます。
-
-## Codexへの最初の指示
-
-生成した研究プロジェクトで、Codexには最初に次のように依頼します。
+生成後、Codex にはまず次のように依頼します。
 
 ```text
 00-project-initializer を実行して。
 ```
 
-ここでの「実行」は、OSコマンドではなく `.agents/skills/00-project-initializer/` のskillとして作業する、という意味です。
+ここでの「実行」はOSコマンドではなく、生成先の `.agents/skills/00-project-initializer/` のskillとして作業するという意味です。
 
-## 5 core skills
+## 5つの core skills
 
-- `00-project-initializer`: 研究計画と先行研究を読み、`research_state/` を初期化する
-- `01-task-planner`: 次の実装タスクと実験タスクを設計する
-- `02-research-executor`: 承認済みタスクに従って実装、解析、実験を行う
-- `03-review-gate`: 方針、実験、結果、外部送信、src変更、論文主張を確認する
-- `04-manuscript-builder`: 研究結果と先行研究をもとに論文計画と原稿を作る
+### `00-project-initializer`
 
-## 2 utility skills
+研究計画と先行研究を読み、`research_state/` の6ファイルを初期化します。
 
-- `utilities/prior-research-downloader`: 先行研究1件分の置き場を作り、取得可能なPDFや公開コードを配置する
-- `utilities/prior-research-ingester`: PDFとソースコードをCodexが読みやすいMarkdownに変換する
+### `01-task-planner`
 
-## prior_research の考え方
+次に行うべき実装タスク、実験タスク、確認タスクを設計します。
+大きな作業を、review-gateで確認できる単位へ分解します。
 
-先行研究は論文単位で管理します。
-論文とコードを大きな `papers/` と `prior_code/` に分けません。
+### `02-research-executor`
+
+承認済みタスクに従って、実装、解析、実験、結果出力を行います。
+研究ロジックは `src/` に置き、`scripts/` は `src/` を呼び出す薄いCLIに限定します。
+
+### `03-review-gate`
+
+研究計画とのズレ、データリーク、再現性、外部送信リスク、`src/` 変更採用、論文主張、原稿品質を確認します。
+判定は `PASS`、`REVISE`、`HUMAN`、`STOP` の4つだけです。
+
+### `04-manuscript-builder`
+
+`results/`、`prior_research/`、`research_state/manuscript_plan.md` をもとに論文原稿を作成します。
+内部管理情報を論文本文に混ぜないことを明示的なルールにしています。
+
+## 2つの utility skills
+
+### `utilities/prior-research-downloader`
+
+先行研究1件分のフォルダを作り、合法的に取得できるPDFや公開コードを配置します。
+paywall回避、ログイン回避、token利用、機関認証の迂回は行いません。
+
+### `utilities/prior-research-ingester`
+
+PDFと公開コードをCodexが読みやすいMarkdownへ変換します。
 
 ```text
-prior_research/
-└── paper_id/
-    ├── paper.pdf
-    ├── paper.md
-    ├── source/
-    ├── source.md
-    ├── metadata.yaml
-    └── notes.md
-```
-
-paywall、ログイン、token、機関認証が必要な場合、Codexは勝手に取得しません。
-人間が合法的にファイルを配置します。
-
-## PDFとコードのMarkdown化
-
-Codexは、生PDFやソースツリー全体ではなく、まずMarkdown化済みファイルを読みます。
-
-```text
-paper.pdf → paper.md
-source/   → source.md
+paper.pdf -> paper.md
+source/   -> source.md
 ```
 
 PDF変換には `pymupdf4llm` を使います。
 ソースコードdigest化には `gitingest` を使います。
 `source/` のdigest化では、1ファイルあたり100KB以下のファイルだけを `source.md` に入れます。
-100KBを超えるファイルは除外し、スキップ理由を `notes.md` と `research_state/logbook.md` に記録します。
-実処理は生成先プロジェクトの `.agents/skills/utilities/` 配下に置かれたutility skill内部スクリプトが担当します。
-人間は原則として `.agents/skills/**/scripts/` を直接実行せず、Codexに依頼します。
+100KBを超えるファイルは除外し、理由を `notes.md` と `research_state/logbook.md` に記録します。
 
-## review-gate
+## research_state
 
-判定は4つだけです。
+研究状態は6つのMarkdownファイルで管理します。
 
 ```text
-PASS
-REVISE
-HUMAN
-STOP
+research_state/
+├── research_spec.md
+├── state.md
+├── tasks.md
+├── logbook.md
+├── manuscript_plan.md
+└── workflow.mmd
 ```
 
-大規模実験、外部APIへのローカルデータ送信、`src/` 変更の採用、論文の主要主張、投稿準備は、人間確認後でなければPASSにしません。
+この構成により、Codexの作業をブラックボックスにせず、研究者が常に確認、差し戻し、再開できる状態を保ちます。
 
 ## experiment capsule
 
-予備実験、探索、候補実験は `experiments/` に experiment capsule として残します。
-研究ロジックのソースコードは `src/` に置き、`experiments/` には置きません。
-`scripts/` には、`src/` を呼び出す実行用Pythonスクリプトだけを置きます。
-`experiments/` は、どの `scripts/` 経由でどの `src/` コードをどの設定で実行したか、結果がどうだったかを残す場所です。
+予備実験、探索、候補実験は `experiments/` に capsule として残します。
 
 ```text
 experiments/
@@ -165,15 +217,12 @@ experiments/
     └── snapshot.diff
 ```
 
-`experiments/` に置いてよい実行ファイルは、原則として `run.sh` だけです。
-`run.sh` は研究ロジックを書かず、環境準備、`scripts/` の実行用Pythonスクリプト呼び出し、引数指定だけを行う薄い入口にします。
-`scripts/` のPythonスクリプトも研究ロジックを書かず、`src/` の `main()` を呼び出すだけにします。
-`src/` を追加または修正した場合は、対応する experiment capsule で検証し、review-gateで採用可否を確認します。
+`experiments/` に研究ロジックのソースコードは置きません。
+`run.sh` は、環境準備、`scripts/` の実行用Pythonスクリプト呼び出し、引数指定だけに限定します。
 
-## reproduction
+## reproduction と results
 
-`reproduction/` は、論文に載せる表、図、集約結果を完全再生成する本実験パイプラインです。
-`reproduction/run_all.sh` を実行すると、`results/` の成果物が再生成される状態を目指します。
+論文に使う本実験は `reproduction/` に整理します。
 
 ```text
 reproduction/
@@ -184,15 +233,7 @@ reproduction/
 └── 01_run_main_analysis.sh
 ```
 
-`reproduction/` には研究ロジックを書きません。
-`.sh` ファイルは `scripts/` の実行用Pythonスクリプトを呼び出す薄い入口に限定します。
-`scripts/` から呼ばれる `src/` が、論文用の表、図、集約結果を `results/` に直接出力します。
-研究ロジックは `src/`、Pythonの実行入口は `scripts/`、論文用成果物は `results/` に分けます。
-
-## results
-
-`results/` は、論文に添付または引用する最終成果物を置く場所です。
-予備実験の生出力ではなく、`reproduction/` から再生成された表、図、集約結果だけを置きます。
+`reproduction/run_all.sh` を実行すると、`results/` の表、図、集約結果が再生成される状態を目指します。
 
 ```text
 results/
@@ -201,43 +242,52 @@ results/
 └── result_index.md
 ```
 
-`result_index.md` には、各成果物の生成元、対応する `reproduction/` step、出所となる experiment capsule または中間出力、原稿内での使い道を記録します。
-`manuscript/` は `experiments/*/outputs/` を直接参照せず、`results/` の成果物を参照します。
+`result_index.md` には、各成果物の生成元、対応する `reproduction/` step、出所となる中間出力、原稿内での使い道を記録します。
 
-## example_project
+## 安全性とレビュー方針
 
-`example_project/` は、このMVPの動作確認用プロジェクトです。
-初期化、先行研究取り込み、`research_state` 更新、experiment capsule、review-gate、manuscript作成の流れを確認するために維持します。
-初期状態の `example_project/README.md` は、Codexの判断材料を増やしすぎないよう最小限にします。
-研究概要は `example_project/research_plan.md` を正とします。
+次の場合、CodexだけでPASSにしません。
 
-確認手順：
+- 大規模実験
+- 外部APIへのローカルデータ送信
+- API keyやtokenの利用
+- `src/` 変更の採用
+- 論文の主要主張
+- 投稿準備
+- 医療、臨床、法務、財務など高リスクな断定
 
-1. Codexアプリで `example_project/` をワークスペースとして開く。
-2. Codexに次を依頼する。
+review-gateでは、必要に応じて `HUMAN` または `STOP` を返します。
 
-```text
-00-project-initializer を実行して。
-```
+## OSSメンテナンス方針
 
-確認するファイル：
+このプロジェクトでは、IssueとPull Requestを次の観点で扱います。
 
-```text
-example_project/research_state/research_spec.md
-example_project/research_state/tasks.md
-example_project/research_state/logbook.md
-```
+- 研究者が理解できる単純さを保つ
+- Codexが扱いやすいMarkdown中心の状態管理を保つ
+- 生成先ワークスペースの再現性を壊さない
+- 内部管理情報と論文本文を混ぜない
+- 外部データ送信やライセンス上のリスクを明示する
 
-## external science-skills
+Issueを作る場合は、`.github/ISSUE_TEMPLATE/` のテンプレートを使ってください。
 
-Google DeepMind science-skills は、生命科学・バイオインフォマティクス用の外部参考資料として扱います。
-MVPではskill本体を同梱せず、導入案内と使用ポリシーだけを置きます。
-参照する場合は `02-research-executor` 経由にします。
-`science-skills` 内のPythonファイルは直接実行せず、必要な処理だけを `src/` に実装し、`scripts/` と `experiments/*/run.sh` から再実行できる形にします。
-外部APIへローカルデータを送る可能性がある場合は review-gate でHUMAN判定にします。
+## ロードマップ
 
-## 書き方
+今後の計画は [ROADMAP.md](ROADMAP.md) にまとめています。
+当面は、研究ワークスペース生成、先行研究ingest、review-gate、reproduction、manuscript workflow の品質を優先します。
 
-- すべてのMarkdownファイルは日本語で書きます。
-- Markdown内の数式は、VS Code Markdownプレビューで表示しやすい `$...$` と `$$ ... $$` で書きます。`\(...\)` と `\[...\]` は使いません。
-- Pythonファイルには、初学者でも目的、入力、出力、処理手順がすぐ理解できる豊富な日本語コメントを残します。
+## ライセンス
+
+このプロジェクトは [MIT License](LICENSE) で公開します。
+
+## 貢献
+
+現在はMVP段階です。
+Pull Requestでは、機能追加よりも次を重視します。
+
+- 既存ワークフローを単純に保つ改善
+- review-gateの精度向上
+- 研究再現性の改善
+- ドキュメントの明確化
+- テストしやすい小さな変更
+
+複雑なWeb UI、DB、クラウド同期、多数の自律エージェントを追加する提案は、原則としてこのMVPの範囲外です。
