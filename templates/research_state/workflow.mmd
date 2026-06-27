@@ -1,7 +1,10 @@
 flowchart TD
-    A[研究計画書を配置] --> B[prior_researchを配置または取得]
-    B --> C[prior-research-ingester]
-    C --> D[project-initializer]
+    A[研究計画書を配置] --> B{prior_researchの状態}
+    B -->|Markdown化済み| D[project-initializer]
+    B -->|DOI/PDF/code_urlから取得| C[prior-research-downloader]
+    B -->|手動PDF/sourceをMarkdown化| I[prior-research-ingester]
+    C --> D
+    I --> D
     D --> E[task-planner]
 
     E --> F[review-gate: 方針確認]

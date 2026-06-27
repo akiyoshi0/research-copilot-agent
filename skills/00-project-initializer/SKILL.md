@@ -14,7 +14,7 @@ description: 研究プロジェクト開始時、または research_state を作
 - `prior_research/*/metadata.yaml`
 - `prior_research/*/paper.md`
 - `prior_research/*/source.md`
-- `prior_research/*/notes.md`
+- `prior_research/*/idea_notes.md`
 
 # 出力
 
@@ -30,16 +30,18 @@ description: 研究プロジェクト開始時、または research_state を作
 1. `research_plan.md` を読む。
 2. 研究目的、仮説、データ、手法、評価指標、成功条件を抽出する。
 3. `prior_research/` のメタデータとMarkdown化済みファイルを読む。
-4. `paper.md` や `source.md` がない場合は、utility skill の `prior-research-ingester` 利用を提案する。
-5. 不明点は推測で埋めず、「不明」と書く。
-6. `research_state/` の6ファイルを初期化する。
-7. 最初のタスク候補を `tasks.md` に書く。
-8. 初期化内容を `logbook.md` に記録する。
+4. `paper.pdf` がなく、`metadata.yaml` に DOI、PMID、PMCID、`paper_url`、`pdf_url`、`code_url` のいずれかがある場合は、`prior-research-downloader` 利用を提案する。
+5. `paper.pdf` や手動配置された `source/` があり、`paper.md` や `source.md` がない場合は、`prior-research-ingester` 利用を提案する。
+6. 不明点は推測で埋めず、「不明」と書く。
+7. `research_state/` の6ファイルを初期化する。
+8. 最初のタスク候補を `tasks.md` に書く。
+9. 初期化内容を `logbook.md` に記録する。
 
 # 呼び出してよいskill
 
 - `01-task-planner`
-- `utilities/prior-research-ingester`
+- `prior-research-downloader`
+- `prior-research-ingester`
 
 # 呼び出してはいけないskill
 
@@ -54,7 +56,8 @@ description: 研究プロジェクト開始時、または research_state を作
 # 戻り先
 
 - 初期化後は `01-task-planner` に進む。
-- 先行研究のMarkdown化が必要な場合は `utilities/prior-research-ingester` に戻る。
+- 先行研究の取得または公開コードdigest化が必要な場合は `prior-research-downloader` に戻る。
+- 手動配置済みPDFまたは `source/` のMarkdown化だけが必要な場合は `prior-research-ingester` に戻る。
 
 # 更新するresearch_state
 

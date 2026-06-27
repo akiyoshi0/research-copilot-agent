@@ -1,19 +1,9 @@
 #!/usr/bin/env python3
-"""先行研究1件分のディレクトリを作る。
+"""先行研究1件分の管理フォルダを作成する。
 
 このファイルの目的:
-`prior_research/<paper_id>/` に、論文PDF、Markdown化した論文、
-ソースコード、メタデータ、メモを置くための最小構成を作ります。
-
-入力:
-paper_id を1つ指定します。
-
-出力:
-prior_research/<paper_id>/ の下に `metadata.yaml`, `notes.md`, `source/` を作ります。
-既存ファイルは上書きしません。
-
-実行例:
-python .agents/skills/utilities/prior-research-downloader/scripts/init_prior_research_item.py paper_a
+`prior_research/<paper_id>/` を作り、論文情報を記録する `metadata.yaml` と、
+先行研究から得た発想や未解決点を記録する `idea_notes.md` を初期化します。
 """
 
 from __future__ import annotations
@@ -23,27 +13,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-def utc_now() -> str:
-    """UTC時刻を文字列で返す。ログに同じ形式で時刻を残すために使う。"""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-
-def write_if_missing(path: Path, text: str) -> str:
-    """ファイルが存在しない場合だけ書き込む。"""
-    if path.exists():
-        return f"skip  {path}"
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-    return f"create {path}"
-
-
-def build_metadata_text() -> str:
-    """metadata.yaml の初期内容を作る。"""
-    return """title: ""
+METADATA_TEMPLATE = """title: ""
 authors: []
 year: ""
 doi: ""
+pmid: ""
+pmcid: ""
 paper_url: ""
 pdf_url: ""
 code_url: ""
@@ -57,92 +32,79 @@ ingested_at: ""
 """
 
 
-def build_notes_text(paper_id: str) -> str:
-    """notes.md の初期内容を作る。"""
-    return f"""# 先行研究メモ: {paper_id}
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
-## 要点
 
-未記入
+def idea_notes_template(name: str) -> str:
+    return f"""# アイデアメモ
 
-## 本研究との関係
+## この論文が行ったこと
 
-未記入
+## 未解決の点
 
-## 再利用できそうな手法
+## 弱点・限界
 
-未記入
+## 再利用できるデータ・コード
 
-## 再利用できそうなコード
+## 発展アイデア
 
-未記入
+## こちらの関心との関係
 
-## 注意すべき実装
-
-未記入
-
-## ライセンス・利用条件
-
-未記入
+## 仮説候補
 
 ## 取得・変換ログ
 
-- {utc_now()}: 先行研究ディレクトリを初期化した。
+- {utc_now()}: `prior_research/{name}/`を初期化した。
 """
 
 
-def append_logbook(project_dir: Path, paper_id: str) -> None:
-    """research_state/logbook.md に先行研究初期化ログを追記する。"""
-    logbook_path = project_dir / "research_state" / "logbook.md"
-    logbook_path.parent.mkdir(parents=True, exist_ok=True)
-
-    line = f"\n## 先行研究初期化: {paper_id}\n\n- 日時: {utc_now()}\n- 内容: `prior_research/{paper_id}/` を作成した。\n"
-
-    if logbook_path.exists():
-        with logbook_path.open("a", encoding="utf-8") as file:
-            file.write(line)
-    else:
-        logbook_path.write_text("# Logbook\n" + line, encoding="utf-8")
+def valid_slug(value: str) -> bool:
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
+    return bool(value) and all(character in allowed for character in value)
 
 
-def init_prior_research_item(project_dir: Path, paper_id: str) -> list[str]:
-    """先行研究1件分の最小構成を作る中心処理。"""
-    item_dir = project_dir / "prior_research" / paper_id
-    source_dir = item_dir / "source"
-    messages: list[str] = []
-
-    if item_dir.exists():
-        messages.append(f"skip  {item_dir}")
-    else:
-        item_dir.mkdir(parents=True, exist_ok=True)
-        messages.append(f"create {item_dir}")
-
-    if source_dir.exists():
-        messages.append(f"skip  {source_dir}")
-    else:
-        source_dir.mkdir(parents=True, exist_ok=True)
-        messages.append(f"create {source_dir}")
-
-    messages.append(write_if_missing(item_dir / "metadata.yaml", build_metadata_text()))
-    messages.append(write_if_missing(item_dir / "notes.md", build_notes_text(paper_id)))
-    append_logbook(project_dir, paper_id)
-
-    return messages
+def write_file(path: Path, content: str, force: bool) -> str:
+    if path.exists() and not force:
+        return f"既存ファイルを保持: {path}"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content.rstrip() + "\n", encoding="utf-8")
+    return f"作成: {path}"
 
 
-def main() -> None:
-    """コマンドラインから実行されたときの入り口。"""
-    parser = argparse.ArgumentParser(description="先行研究1件分の置き場を作ります。")
-    parser.add_argument("paper_id", help="先行研究ID。例: paper_a")
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("name", help="Folder name under prior_research/, such as paper_a.")
+    parser.add_argument(
+        "--root",
+        default=".",
+        help="Workspace root. Defaults to the current directory.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing metadata and idea notes.",
+    )
     args = parser.parse_args()
 
-    project_dir = Path.cwd()
-    messages = init_prior_research_item(project_dir, args.paper_id)
+    if not valid_slug(args.name):
+        parser.error("name must contain only letters, numbers, underscores, or hyphens")
 
-    print("先行研究ディレクトリを初期化しました。")
+    root = Path(args.root).expanduser().resolve()
+    item_dir = root / "prior_research" / args.name
+    item_dir.mkdir(parents=True, exist_ok=True)
+
+    messages = [
+        write_file(item_dir / "metadata.yaml", METADATA_TEMPLATE, args.force),
+        write_file(item_dir / "idea_notes.md", idea_notes_template(args.name), args.force),
+    ]
+
+    print(f"先行研究アイテムを作成: {item_dir}")
     for message in messages:
         print(message)
+    print(f"作成日時: {utc_now()}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -1,43 +1,62 @@
 #!/usr/bin/env python3
-"""先行研究PDFとソースコードをMarkdown化する。
+"""先行研究カプセル内のPDFと公開コードをMarkdown化する。
 
 このファイルの目的:
-`prior_research/<paper_id>/paper.pdf` を `paper.md` に変換し、
-`prior_research/<paper_id>/source/` を `source.md` に変換します。
-
-入力:
-prior_research/<paper_id> のディレクトリを指定します。
-
-出力:
-- paper.md
-- source.md
-- metadata.yaml の ingested_at 更新
-- notes.md の変換ログ
-- research_state/logbook.md の変換ログ
-
-実行例:
-python .agents/skills/utilities/prior-research-ingester/scripts/ingest_prior_research.py prior_research/paper_a
+`prior_research/<paper_id>/paper.pdf` を `paper.md` に変換し、PDF内画像を
+`figures/` に保存します。さらに `metadata.yaml` の `code_url`、または人間が
+手動配置した `source/` を `gitingest` で `source.md` に変換します。
 """
 
 from __future__ import annotations
 
 import argparse
-import shutil
-import tempfile
+import os
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
 
 MAX_SOURCE_FILE_BYTES = 100 * 1024
+PDF_IMAGE_DIR_NAME = "figures"
+DIRECT_PYTHON_OVERRIDE_ENV = "RESEARCH_COPILOT_ALLOW_DIRECT_PYTHON"
+SCRIPT_RELATIVE_PATH = ".agents/skills/utilities/prior-research-ingester/scripts/ingest_prior_research.py"
 
 
 def utc_now() -> str:
-    """UTC時刻を文字列で返す。"""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return datetime.now(timezone.utc).isoformat()
+
+
+def running_under_uv() -> bool:
+    return bool(os.environ.get("UV_RUN_RECURSION_DEPTH"))
+
+
+def require_uv_run(script_relative_path: str) -> None:
+    if os.environ.get(DIRECT_PYTHON_OVERRIDE_ENV) == "1":
+        return
+    if running_under_uv():
+        return
+
+    raise SystemExit(
+        "\n".join(
+            [
+                "このscriptはuv経由で実行してください。",
+                f"例: uv run python {script_relative_path} <prior_research_dir>",
+                "`python ...`や`python3 ...`の直呼びは、.venv外のPythonを使い依存不足を起こすため停止しました。",
+                f"一時的に直呼びを許可する場合だけ、{DIRECT_PYTHON_OVERRIDE_ENV}=1を明示してください。",
+            ]
+        )
+    )
+
+
+def write_text(path: Path, text: str, force: bool) -> str:
+    if path.exists() and not force:
+        return f"既存ファイルを保持: {path}"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text.rstrip() + "\n", encoding="utf-8")
+    return f"作成: {path}"
 
 
 def append_text(path: Path, text: str) -> None:
-    """ファイルにテキストを追記する。なければ作る。"""
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
         with path.open("a", encoding="utf-8") as file:
@@ -46,211 +65,246 @@ def append_text(path: Path, text: str) -> None:
         path.write_text(text, encoding="utf-8")
 
 
-def load_pymupdf4llm():
-    """pymupdf4llm を読み込む。見つからない場合は理由を出して止める。"""
-    try:
-        import pymupdf4llm  # type: ignore
-    except ImportError as exc:
-        raise SystemExit(
-            "pymupdf4llm が見つかりません。\n"
-            "このプロジェクトでは pip install ではなく uv sync を使います。"
-        ) from exc
-    return pymupdf4llm
-
-
-def load_gitingest():
-    """gitingest を読み込む。見つからない場合は理由を出して止める。"""
-    try:
-        from gitingest import ingest  # type: ignore
-    except ImportError as exc:
-        raise SystemExit(
-            "gitingest が見つかりません。\n"
-            "このプロジェクトでは pip install ではなく uv sync を使います。"
-        ) from exc
-    return ingest
-
-
-def format_bytes(size: int) -> str:
-    """バイト数を、人間が読みやすいKB表記に変換する。"""
-    return f"{size / 1024:.1f}KB"
-
-
-def prepare_small_source_tree(source_dir: Path, filtered_dir: Path) -> tuple[int, list[str]]:
-    """100KB以下のファイルだけを、一時ディレクトリへ同じ階層構造でコピーする。
-
-    gitingest に元の source/ をそのまま渡すと、大きなnotebook、データ、
-    モデルファイルなどが source.md に入り、Codexが読むには重くなりすぎる。
-    そのため、ここで1ファイル100KB以下のものだけを明示的に選別する。
-    """
-    copied_count = 0
-    skipped_messages: list[str] = []
-
-    for path in sorted(source_dir.rglob("*")):
-        if not path.is_file():
-            continue
-
-        relative_path = path.relative_to(source_dir)
-        file_size = path.stat().st_size
-
-        if file_size > MAX_SOURCE_FILE_BYTES:
-            skipped_messages.append(
-                f"`source/{relative_path}` は {format_bytes(file_size)} で100KBを超えるため source.md から除外した。"
-            )
-            continue
-
-        destination = filtered_dir / relative_path
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, destination)
-        copied_count += 1
-
-    return copied_count, skipped_messages
-
-
-def convert_paper(item_dir: Path) -> str:
-    """paper.pdf があれば paper.md に変換する。"""
-    pdf_path = item_dir / "paper.pdf"
-    output_path = item_dir / "paper.md"
-
-    if not pdf_path.exists():
-        return "paper.pdf がないため論文Markdown化をスキップした。"
-
-    try:
-        pymupdf4llm = load_pymupdf4llm()
-        body = pymupdf4llm.to_markdown(str(pdf_path))
-    except Exception as exc:
-        return f"paper.pdf のMarkdown化に失敗した: {exc}"
-
-    header = f"""# 論文Markdown
-
-## メタ情報
-
-- PDFファイル: `{pdf_path}`
-- Markdown変換日: {utc_now()}
-- 変換ライブラリ: pymupdf4llm
-
-## 本文
-
-"""
-    output_path.write_text(header + body, encoding="utf-8")
-    return f"paper.md を作成した: `{output_path}`"
-
-
-def convert_source(item_dir: Path) -> list[str]:
-    """source/ があれば source.md に変換する。"""
-    source_dir = item_dir / "source"
-    output_path = item_dir / "source.md"
-
-    if not source_dir.exists() or not any(source_dir.iterdir()):
-        return ["source/ が空または存在しないためコードMarkdown化をスキップした。"]
-
-    with tempfile.TemporaryDirectory(prefix="research_source_ingest_") as temp_dir_name:
-        filtered_dir = Path(temp_dir_name) / "source"
-        copied_count, skipped_messages = prepare_small_source_tree(source_dir, filtered_dir)
-
-        if copied_count == 0:
-            messages = ["source/ に100KB以下のファイルがないため source.md 作成をスキップした。"]
-            messages.extend(skipped_messages)
-            return messages
-
-        try:
-            ingest = load_gitingest()
-            summary, tree, content = ingest(str(filtered_dir))
-        except Exception as exc:
-            messages = [f"source/ のMarkdown化に失敗した: {exc}"]
-            messages.extend(skipped_messages)
-            return messages
-
-    text = f"""# ソースコードMarkdown
-
-## メタ情報
-
-- 入力ディレクトリ: `{source_dir}`
-- Markdown変換日: {utc_now()}
-- 変換ライブラリ: gitingest
-- ingest対象: 1ファイルあたり100KB以下のファイルのみ
-- ingest対象ファイル数: {copied_count}
-
-## Summary
-
-{summary}
-
-## Directory Tree
-
-{tree}
-
-## Files
-
-{content}
-"""
-    output_path.write_text(text, encoding="utf-8")
-    messages = [f"source.md を作成した: `{output_path}`"]
-    messages.extend(skipped_messages)
-    return messages
-
-
-def update_ingested_at(metadata_path: Path) -> str:
-    """metadata.yaml の ingested_at を更新する。"""
-    now = utc_now()
+def update_metadata_value(metadata_path: Path, key: str, value: str) -> str:
+    line = f'{key}: "{value}"'
 
     if not metadata_path.exists():
-        metadata_path.write_text(f'ingested_at: "{now}"\n', encoding="utf-8")
-        return "metadata.yaml を作成し、ingested_at を記録した。"
+        metadata_path.write_text(line + "\n", encoding="utf-8")
+        return f"metadata.yamlを作成し、{key}を設定した"
 
     lines = metadata_path.read_text(encoding="utf-8").splitlines()
-    updated_lines: list[str] = []
+    updated: list[str] = []
     replaced = False
 
-    for line in lines:
-        if line.startswith("ingested_at:"):
-            updated_lines.append(f'ingested_at: "{now}"')
+    for existing_line in lines:
+        if existing_line.startswith(f"{key}:"):
+            updated.append(line)
             replaced = True
         else:
-            updated_lines.append(line)
+            updated.append(existing_line)
 
     if not replaced:
-        updated_lines.append(f'ingested_at: "{now}"')
+        updated.append(line)
 
-    metadata_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
-    return "metadata.yaml の ingested_at を更新した。"
-
-
-def append_logs(item_dir: Path, project_dir: Path, messages: list[str]) -> None:
-    """notes.md と logbook.md に変換結果を記録する。"""
-    paper_id = item_dir.name
-    text = "\n## 変換ログ\n\n" + f"- 日時: {utc_now()}\n" + "".join(f"- {message}\n" for message in messages)
-
-    append_text(item_dir / "notes.md", text)
-
-    logbook_text = f"\n## 先行研究ingest: {paper_id}\n\n" + f"- 日時: {utc_now()}\n" + "".join(f"- {message}\n" for message in messages)
-    append_text(project_dir / "research_state" / "logbook.md", logbook_text)
+    metadata_path.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    return f"metadata.yamlの{key}を更新した"
 
 
-def ingest_prior_research(item_dir: Path) -> list[str]:
-    """先行研究1件をMarkdown化する中心処理。"""
-    if not item_dir.exists():
-        raise SystemExit(f"先行研究ディレクトリが見つかりません: {item_dir}")
+def read_metadata_value(metadata_path: Path, key: str) -> str:
+    if not metadata_path.exists():
+        return ""
+    for line in metadata_path.read_text(encoding="utf-8").splitlines():
+        if ":" not in line or line.lstrip().startswith("#"):
+            continue
+        existing_key, value = line.split(":", 1)
+        if existing_key.strip() == key:
+            return value.strip().strip('"').strip("'")
+    return ""
 
-    project_dir = item_dir.parents[1]
-    messages = [convert_paper(item_dir)]
-    messages.extend(convert_source(item_dir))
-    messages.append(update_ingested_at(item_dir / "metadata.yaml"))
-    append_logs(item_dir, project_dir, messages)
+
+def append_ingest_log(item_dir: Path, messages: list[str]) -> None:
+    notes_path = item_dir / "idea_notes.md"
+    if notes_path.exists():
+        existing = notes_path.read_text(encoding="utf-8")
+        has_log_heading = "## 取得・変換ログ" in existing or "## Intake / Ingest Log" in existing
+        heading = "" if has_log_heading else "\n## 取得・変換ログ\n"
+    else:
+        heading = "# アイデアメモ\n\n## 取得・変換ログ\n"
+
+    entry = f"\n- {utc_now()}: `{item_dir.name}`のingestを実行した\n"
+    entry += "".join(f"  - {message}\n" for message in messages)
+    append_text(notes_path, heading + entry)
+
+
+@contextmanager
+def working_directory(path: Path):
+    previous_cwd = Path.cwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(previous_cwd)
+
+
+def ingest_pdf(item_dir: Path, force: bool) -> str:
+    pdf_path = item_dir / "paper.pdf"
+    out_path = item_dir / "paper.md"
+    if not pdf_path.exists():
+        return f"paper.pdfが存在しないためPDF変換をスキップした: {pdf_path}"
+    if out_path.exists() and not force:
+        return f"既存のpaper.mdを保持した: {out_path}"
+
+    try:
+        markdown = pdf_to_markdown(pdf_path)
+    except ImportError:
+        return "pymupdf4llmが未導入のためPDF変換をスキップした。別方式のfallbackは追加せず、人間に導入または手動作成を確認する"
+    except Exception as error:  # noqa: BLE001
+        return f"PDF変換をスキップした: {error}"
+
+    header = f"<!-- paper.pdfから{utc_now()}に変換 -->\n\n"
+    write_message = write_text(out_path, header + markdown, force=True)
+    return f"{write_message}; PDF内画像の保存先: {PDF_IMAGE_DIR_NAME}/"
+
+
+def pdf_to_markdown(pdf_path: Path) -> str:
+    import pymupdf4llm  # type: ignore[import-not-found]
+
+    image_dir = pdf_path.parent / PDF_IMAGE_DIR_NAME
+    image_dir.mkdir(parents=True, exist_ok=True)
+    with working_directory(pdf_path.parent):
+        return pymupdf4llm.to_markdown(
+            pdf_path.name,
+            write_images=True,
+            image_path=PDF_IMAGE_DIR_NAME,
+            image_format="png",
+            dpi=200,
+        )
+
+
+def format_gitingest_result(result: object) -> str:
+    if isinstance(result, tuple):
+        if len(result) == 3:
+            summary, tree, content = result
+            return (
+                "# ソースコードダイジェスト\n\n"
+                f"## Summary\n\n{summary}\n\n"
+                f"## ディレクトリ構造\n\n```text\n{tree}\n```\n\n"
+                f"## 内容\n\n{content}"
+            )
+        return "\n\n".join(str(part) for part in result)
+    return str(result)
+
+
+def ingest_source_with_python_api(source: str) -> str | None:
+    try:
+        from gitingest import ingest  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+
+    result = ingest(source, max_file_size=MAX_SOURCE_FILE_BYTES)
+    return format_gitingest_result(result)
+
+
+def source_markdown_header(source_label: str) -> str:
+    return (
+        f"<!-- {source_label}から{utc_now()}にgitingestで変換 -->\n"
+        f"<!-- gitingest max_file_size: 100KB; source code本体は保存しない -->\n\n"
+    )
+
+
+def write_source_markdown(out_path: Path, markdown: str, source_label: str) -> str:
+    return write_text(out_path, source_markdown_header(source_label) + markdown, force=True)
+
+
+def looks_sensitive_source(value: str) -> bool:
+    lowered = value.lower()
+    return (
+        "@" in value
+        or "token=" in lowered
+        or "access_token=" in lowered
+        or "apikey=" in lowered
+        or "api_key=" in lowered
+        or "private" in lowered
+    )
+
+
+def is_http_url(value: str) -> bool:
+    return value.startswith("https://") or value.startswith("http://")
+
+
+def ingest_source_url(item_dir: Path, code_url: str, force: bool) -> list[str]:
+    out_path = item_dir / "source.md"
+    if not code_url:
+        return ["code_urlが空のためsource.md作成をスキップした"]
+    if looks_sensitive_source(code_url):
+        return ["code_urlに認証情報・token・privateを示す文字列があるためsource.md作成を停止した"]
+    if not is_http_url(code_url):
+        return [f"code_urlがHTTP(S)ではないためsource.md作成をスキップした: {code_url}"]
+    if out_path.exists() and not force:
+        return [f"既存のsource.mdを保持した: {out_path}"]
+
+    try:
+        markdown = ingest_source_with_python_api(code_url)
+    except Exception as error:  # noqa: BLE001
+        return [f"gitingest Python APIでのcode_url変換をスキップした: {error}"]
+
+    if markdown is None:
+        return ["gitingestが未導入のためcode_url変換をスキップした。別方式のfallbackは追加せず、人間に導入または手動作成を確認する"]
+
+    return [write_source_markdown(out_path, markdown, code_url)]
+
+
+def ingest_source(item_dir: Path, force: bool) -> list[str]:
+    source_dir = item_dir / "source"
+    out_path = item_dir / "source.md"
+    if not source_dir.exists():
+        return [f"sourceディレクトリが存在しないためローカルsource変換をスキップした: {source_dir}"]
+    if out_path.exists() and not force:
+        return [f"既存のsource.mdを保持した: {out_path}"]
+
+    try:
+        markdown = ingest_source_with_python_api(str(source_dir))
+    except Exception as error:  # noqa: BLE001
+        return [f"gitingest Python APIでのローカルsource変換をスキップした: {error}"]
+
+    if markdown is None:
+        return ["gitingestが未導入のためローカルsource変換をスキップした。別方式のfallbackは追加せず、人間に導入または手動作成を確認する"]
+
+    return [write_source_markdown(out_path, markdown, "source/")]
+
+
+def ingest_prior_research(
+    item_dir: Path,
+    force: bool,
+    pdf_only: bool = False,
+    source_only: bool = False,
+    source_url: str = "",
+) -> list[str]:
+    if pdf_only and source_only:
+        raise ValueError("pdf_only and source_only cannot both be true")
+
+    messages: list[str] = []
+    if not source_only:
+        messages.append(ingest_pdf(item_dir, force))
+    if not pdf_only:
+        if not source_url:
+            source_url = read_metadata_value(item_dir / "metadata.yaml", "code_url")
+        if source_url:
+            messages.extend(ingest_source_url(item_dir, source_url, force))
+        else:
+            messages.extend(ingest_source(item_dir, force))
+    messages.append(update_metadata_value(item_dir / "metadata.yaml", "ingested_at", utc_now()))
+    append_ingest_log(item_dir, messages)
     return messages
 
 
-def main() -> None:
-    """コマンドラインから実行されたときの入り口。"""
-    parser = argparse.ArgumentParser(description="先行研究PDFとソースコードをMarkdown化します。")
-    parser.add_argument("item_dir", help="prior_research/<paper_id> のディレクトリ")
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("item_dir", help="Path such as prior_research/paper_a.")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing paper.md or source.md.",
+    )
+    parser.add_argument("--pdf-only", action="store_true", help="Only convert paper.pdf to paper.md.")
+    parser.add_argument("--source-only", action="store_true", help="Only create source.md from metadata code_url or local source/.")
     args = parser.parse_args()
 
-    item_dir = Path(args.item_dir).expanduser().resolve()
-    messages = ingest_prior_research(item_dir)
+    if args.pdf_only and args.source_only:
+        parser.error("--pdf-only and --source-only cannot be used together")
+    require_uv_run(SCRIPT_RELATIVE_PATH)
 
-    print("先行研究ingest処理を完了しました。")
+    item_dir = Path(args.item_dir).expanduser().resolve()
+    if not item_dir.exists():
+        parser.error(f"item_dirが存在しません: {item_dir}")
+    if not item_dir.is_dir():
+        parser.error(f"item_dirはディレクトリではありません: {item_dir}")
+
+    messages = ingest_prior_research(item_dir, args.force, args.pdf_only, args.source_only)
     for message in messages:
         print(message)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

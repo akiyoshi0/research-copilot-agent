@@ -18,6 +18,9 @@ description: 重要な段階移行の前後に使う。判定はPASS、REVISE、
 - 必要に応じて `reproduction/`
 - 必要に応じて `results/` と `results/result_index.md`
 - 必要に応じて `manuscript/`
+- 必要に応じて `prior_research/*/metadata.yaml`
+- 必要に応じて `prior_research/*/idea_notes.md`
+- 必要に応じて `prior_research/*/paper.md`
 
 # 出力
 
@@ -62,11 +65,12 @@ description: 重要な段階移行の前後に使う。判定はPASS、REVISE、
 30. 外部送信リスクを確認する。
 31. 論文主張と根拠が対応しているか確認する。
 32. 引用された論文が `prior_research/*/paper.md` としてingest済みか確認する。
-33. 未取得または未ingestの論文を根拠にした断定がないか確認する。
-34. 本文中の引用番号が `manuscript/references.md` の番号付き参考文献リストと対応しているか確認する。
-35. `references.md` の各番号が本文中で少なくとも1回引用されているか確認する。
-36. ライセンス上の問題がないか確認する。
-37. 4つの判定から1つだけ選ぶ。
+33. 引用された論文の `metadata.yaml` と `idea_notes.md` を読み、取得元、アクセス条件、ライセンス注意、取得・変換ログが根拠として妥当か確認する。
+34. 未取得または未ingestの論文を根拠にした断定がないか確認する。
+35. 本文中の引用番号が `manuscript/references.md` の番号付き参考文献リストと対応しているか確認する。
+36. `references.md` の各番号が本文中で少なくとも1回引用されているか確認する。
+37. ライセンス上の問題がないか確認する。
+38. 4つの判定から1つだけ選ぶ。
 
 # 論文としての批評観点
 

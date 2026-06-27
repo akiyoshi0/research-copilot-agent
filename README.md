@@ -167,24 +167,30 @@ my_project/
 
 ## 2つの utility skills
 
-### `utilities/prior-research-downloader`
+呼び出すときの正式なskill名は `prior-research-downloader` と `prior-research-ingester` です。
+`skills/utilities/...` は実体のフォルダパスを説明するときだけ使います。
 
-先行研究1件分のフォルダを作り、合法的に取得できるPDFや公開コードを配置します。
+### `prior-research-downloader`
+
+先行研究1件分のフォルダを作り、合法的に取得できる公開PDFと公開コードdigestを整えます。
 paywall回避、ログイン回避、token利用、機関認証の迂回は行いません。
+実体は `skills/utilities/prior-research-downloader/` にあります。
 
-### `utilities/prior-research-ingester`
+### `prior-research-ingester`
 
 PDFと公開コードをCodexが読みやすいMarkdownへ変換します。
+実体は `skills/utilities/prior-research-ingester/` にあります。
 
 ```text
 paper.pdf -> paper.md
-source/   -> source.md
+code_url or source/ -> source.md
 ```
 
 PDF変換には `pymupdf4llm` を使います。
 ソースコードdigest化には `gitingest` を使います。
-`source/` のdigest化では、1ファイルあたり100KB以下のファイルだけを `source.md` に入れます。
-100KBを超えるファイルは除外し、理由を `notes.md` と `research_state/logbook.md` に記録します。
+公開コードは原則としてcloneせず、`metadata.yaml` の `code_url` から `source.md` へ直接digest化します。
+`gitingest` では、1ファイルあたり100KB以下のファイルだけを `source.md` に入れます。
+取得元、変換結果、失敗理由、未解決点は `metadata.yaml` と `idea_notes.md` に記録します。
 
 ## research_state
 
@@ -212,7 +218,7 @@ experiments/
     ├── manifest.md
     ├── config.yaml
     ├── run.sh
-    ├── notes.md
+    ├── idea_notes.md
     ├── outputs/
     └── snapshot.diff
 ```

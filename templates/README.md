@@ -36,10 +36,11 @@ prior_research/
 └── paper_id/
     ├── paper.pdf
     ├── paper.md
-    ├── source/
+    ├── figures/
     ├── source.md
     ├── metadata.yaml
-    └── notes.md
+    ├── idea_notes.md
+    └── source/        # 人間が手動配置した公開コードがある場合だけ
 ```
 
 PDFやコードの取得にログイン、token、機関認証が必要な場合は、Codexが勝手に取得せず、人間が合法的に配置します。
@@ -49,15 +50,17 @@ PDFやコードの取得にログイン、token、機関認証が必要な場合
 Codexは、生PDFやソースツリー全体ではなく、まずMarkdown化済みファイルを読みます。
 
 ```text
-paper.pdf → paper.md
-source/   → source.md
+paper.pdf           → paper.md
+code_url or source/ → source.md
 ```
 
 PDF変換には `pymupdf4llm` を使います。
 ソースコードdigest化には `gitingest` を使います。
-`source/` のdigest化では、1ファイルあたり100KB以下のファイルだけを `source.md` に入れます。
-100KBを超えるファイルは除外し、スキップ理由を `notes.md` と `research_state/logbook.md` に記録します。
+公開コードは原則としてcloneせず、`metadata.yaml` の `code_url` から `source.md` へ直接digest化します。
+`gitingest` では、1ファイルあたり100KB以下のファイルだけを `source.md` に入れます。
+取得元、変換結果、失敗理由、未解決点は `metadata.yaml` と `idea_notes.md` に記録します。
 実処理は `.agents/skills/utilities/` 配下のutility skill内部スクリプトが担当します。
+呼び出すskill名は `prior-research-downloader` と `prior-research-ingester` です。
 
 ## 実験の置き方
 

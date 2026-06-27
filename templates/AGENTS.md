@@ -43,24 +43,29 @@
 
 - `paper.pdf`
 - `paper.md`
-- `source/`
 - `source.md`
 - `metadata.yaml`
-- `notes.md`
+- `idea_notes.md`
+- `figures/`
+- `source/` は人間が手動配置した公開コードがある場合だけ使う
 
 `papers/` と `prior_code/` のような大きな分離フォルダは作らない。
 
 先行研究の取得とingestにはutility skillを使う。
 
-- `utilities/prior-research-downloader`
-- `utilities/prior-research-ingester`
+- `prior-research-downloader`
+- `prior-research-ingester`
+
+`utilities/...` は `.agents/skills/` 内のフォルダパスとしてだけ扱い、skill名としては使わない。
 
 paywallを回避しない。
 権利のない場所から著作権付きPDFを取得しない。
 ログイン、token、機関認証が必要な場合は、人間にファイル配置を依頼する。
 
 `paper.pdf` から `paper.md` への変換には `pymupdf4llm` を使う。
-`source/` から `source.md` への変換には `gitingest` を使う。
+`code_url` または手動配置された `source/` から `source.md` への変換には `gitingest` を使う。
+公開コードは原則としてcloneせず、`gitingest` で `source.md` に直接digest化する。
+取得元、変換結果、失敗理由、未解決点は `metadata.yaml` と `idea_notes.md` に記録する。
 `.agents/skills/**/scripts/` はutility skillの内部スクリプト置き場である。
 人間は原則として `.agents/skills/**/scripts/` を直接実行しない。
 
@@ -76,7 +81,7 @@ paywallを回避しない。
 先行研究が必要な場合は次を読む。
 
 1. `prior_research/*/metadata.yaml`
-2. `prior_research/*/notes.md`
+2. `prior_research/*/idea_notes.md`
 3. `prior_research/*/paper.md`
 4. `prior_research/*/source.md`
 
